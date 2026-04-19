@@ -11,24 +11,26 @@ function getDraftMode(totalRounds, auctionRounds) {
   return                                     { icon: '⚡', label: 'HYBRID DRAFT',     color: '#f0b429' }
 }
 
-export default function SetupScreen({ onStartDraft }) {
-  const [draftName, setDraftName]           = useState('DRAFT NIGHT')
-  const [editingTitle, setEditingTitle]     = useState(false)
-  const [numTeams, setNumTeams]             = useState(10)
-  const [totalRounds, setTotalRounds]       = useState(15)
-  const [auctionRounds, setAuctionRounds]   = useState(8)
-  const [auctionBudget, setAuctionBudget]   = useState(200)
-  const [nomOrder, setNomOrder]             = useState('serpentine')
-  const [serpStart, setSerpStart]           = useState('serpentine')
-  const [keepersPerTeam, setKeepersPerTeam] = useState(0)
-  const [teamNames, setTeamNames]           = useState(
-    Array.from({ length: 10 }, (_, i) => `Team ${i + 1}`)
-  )
-  const [keepers, setKeepers]               = useState({})
-  const [posLimits, setPosLimits]           = useState({ ...POS_DEFAULTS })
-  const [posMinLimits, setPosMinLimits]     = useState({ ...POS_MIN_DEFAULTS })
-  const [players, setPlayers]               = useState([])
-  const [csvFilename, setCsvFilename]       = useState('')
+export default function SetupScreen({ wizardConfig, onStartDraft }) {
+const w = wizardConfig || {}
+
+const [draftName, setDraftName]           = useState(w.draftName     || 'DRAFT NIGHT')
+const [editingTitle, setEditingTitle]     = useState(false)
+const [numTeams, setNumTeams]             = useState(w.numTeams       || 10)
+const [totalRounds, setTotalRounds]       = useState(w.totalRounds    || 15)
+const [auctionRounds, setAuctionRounds]   = useState(w.auctionRounds  ?? 8)
+const [auctionBudget, setAuctionBudget]   = useState(w.auctionBudget  || 200)
+const [nomOrder, setNomOrder]             = useState('serpentine')
+const [serpStart, setSerpStart]           = useState('serpentine')
+const [keepersPerTeam, setKeepersPerTeam] = useState(w.keepersPerTeam || 0)
+const [teamNames, setTeamNames]           = useState(
+  w.teamNames || Array.from({ length: w.numTeams || 10 }, (_, i) => `Team ${i + 1}`)
+)
+const [keepers, setKeepers]               = useState({})
+const [posLimits, setPosLimits]           = useState(w.posLimits    || { ...POS_DEFAULTS })
+const [posMinLimits, setPosMinLimits]     = useState(w.posMinLimits || { ...POS_MIN_DEFAULTS })
+const [players, setPlayers]               = useState([])
+const [csvFilename, setCsvFilename]       = useState('')
 
   const serpentineRounds = Math.max(0, totalRounds - auctionRounds)
   const isAuction        = auctionRounds > 0
