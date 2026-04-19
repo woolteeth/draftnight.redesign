@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { parseCSV } from '../logic/parsePlayers'
 
-const STEPS = ['type', 'teams', 'rounds', 'positions', 'keepers', 'names']
+const STEPS = ['type', 'teams', 'rounds', 'positions', 'keepers', 'source', 'names']
 
 const STEP_TITLES = {
   type:      'WHAT KIND OF DRAFT?',
@@ -8,10 +9,17 @@ const STEP_TITLES = {
   rounds:    'ROUND STRUCTURE',
   positions: 'ROSTER REQUIREMENTS',
   keepers:   'KEEPER SETTINGS',
+  source:    'PLAYER SOURCE',
   names:     'TEAM NAMES',
 }
 
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
+
+const API_SOURCES = [
+  { value: 'espn',       label: 'ESPN',       icon: '🏈', soon: true },
+  { value: 'draftpros',  label: 'DRAFT PROS', icon: '📊', soon: true },
+  { value: 'draftkings', label: 'DRAFTKINGS', icon: '👑', soon: true },
+]
 
 export default function NewDraftWizard({ onComplete, onCancel, onSkip }) {
   const [step, setStep]                     = useState(0)
@@ -26,6 +34,9 @@ export default function NewDraftWizard({ onComplete, onCancel, onSkip }) {
   const [keepersPerTeam, setKeepersPerTeam] = useState(1)
   const [hasKeeperCost, setHasKeeperCost]   = useState(null)
   const [keeperCost, setKeeperCost]         = useState(0)
+  const [playerSource, setPlayerSource]     = useState(null)
+  const [players, setPlayers]               = useState([])
+  const [csvFilename, setCsvFilename]       = useState('')
   const [teamNames, setTeamNames]           = useState(
     Array.from({ length: 10 }, (_, i) => `Team ${i + 1}`)
   )
@@ -55,13 +66,27 @@ export default function NewDraftWizard({ onComplete, onCancel, onSkip }) {
     })
   }
 
+  function handleCSV(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setCsvFilename(file.name)
+    setPlayerSource('csv')
+    const reader = new FileReader()
+    reader.onload = evt => {
+      const parsed = parseCSV(evt.target.result)
+      setPlayers(parsed)
+    }
+    reader.readAsText(file)
+  }
+
   function canAdvance() {
     if (currentStep === 'type')    return draftType !== null
+    if (currentStep === 'source')  return players.length > 0
     if (currentStep === 'keepers') {
-      if (hasKeepers === null) return false
+      if (hasKeepers === null)  return false
       if (hasKeepers === false) return true
-      if (hasKeepers === true && !isAuction) return true
-      if (hasKeepers === true && isAuction)  return hasKeeperCost !== null
+      if (!isAuction)           return true
+      return hasKeeperCost !== null
     }
     return true
   }
@@ -89,6 +114,8 @@ export default function NewDraftWizard({ onComplete, onCancel, onSkip }) {
       hasKeepers:       hasKeepers || false,
       keepersPerTeam:   hasKeepers ? keepersPerTeam : 0,
       keeperCost:       hasKeepers && hasKeeperCost ? keeperCost : 0,
+      playerSource,
+      players,
       teamNames:        teamNames.slice(0, numTeams),
     })
   }
@@ -284,7 +311,52 @@ export default function NewDraftWizard({ onComplete, onCancel, onSkip }) {
             </div>
           )}
 
-          {/* STEP 6: Names */}
+          {/* STEP 6: Source */}
+          {currentStep === 'source' && (
+            <div style={S.sourceLayout}>
+
+              {/* CSV */}
+              <div style={{
+                ...S.sourceCard,
+                ...(playerSource === 'csv' ? S.sourceCardActive : {})
+              }}>
+                <div style={S.sourceCardTop}>
+                  <div style={S.sourceIcon}>📄</div>
+                  <div>
+                    <div style={S.sourceLabel}>CSV FILE</div>
+                    <div style={S.sourceDesc}>Upload a formatted player rankings file</div>
+                  </div>
+                  <label style={S.uploadBtn}>
+                    {csvFilename ? '✓ CHANGE FILE' : 'UPLOAD CSV'}
+                    <input type="file" accept=".csv" style={{ display: 'none' }} onChange={handleCSV} />
+                  </label>
+                </div>
+                {csvFilename && (
+                  <div style={S.csvConfirm}>
+                    ✓ {csvFilename} — {players.length} players loaded
+                  </div>
+                )}
+              </div>
+
+              {/* API Sources — coming soon */}
+              <div style={S.soonHeader}>LIVE RANKINGS — COMING SOON</div>
+              {API_SOURCES.map(({ value, label, icon }) => (
+                <div key={value} style={S.sourceCardSoon}>
+                  <div style={S.sourceCardTop}>
+                    <div style={S.sourceIcon}>{icon}</div>
+                    <div>
+                      <div style={S.sourceLabelSoon}>{label}</div>
+                      <div style={S.sourceDesc}>Live rankings via API</div>
+                    </div>
+                    <div style={S.soonTag}>COMING SOON</div>
+                  </div>
+                </div>
+              ))}
+
+            </div>
+          )}
+
+          {/* STEP 7: Names */}
           {currentStep === 'names' && (
             <div style={S.namesGrid}>
               {teamNames.slice(0, numTeams).map((name, i) => (
@@ -423,6 +495,57 @@ const S = {
   },
   yesNoBtnActive: { background: 'rgba(240,180,41,0.12)', borderColor: 'var(--accent)', color: 'var(--accent)' },
   hint: { fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 1, color: 'var(--text-muted)', lineHeight: 1.6 },
+  sourceLayout: { display: 'flex', flexDirection: 'column', gap: 12 },
+  sourceCard: {
+    background: 'var(--surface2)',
+    border: '1px solid var(--border)',
+    borderRadius: 8, padding: '16px 20px',
+  },
+  sourceCardActive: {
+    background: 'rgba(240,180,41,0.08)',
+    borderColor: 'var(--accent)',
+  },
+  sourceCardSoon: {
+    background: 'var(--surface2)',
+    border: '1px solid var(--border)',
+    borderRadius: 8, padding: '16px 20px',
+    opacity: 0.45,
+  },
+  sourceCardTop: { display: 'flex', alignItems: 'center', gap: 16 },
+  sourceIcon: { fontSize: 28, minWidth: 36 },
+  sourceLabel: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 2, color: 'var(--text)' },
+  sourceLabelSoon: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 18, letterSpacing: 2, color: 'var(--text-muted)' },
+  sourceDesc: { fontFamily: "'Barlow Condensed', sans-serif", fontSize: 13, color: 'var(--text-muted)', marginTop: 2 },
+  uploadBtn: {
+    marginLeft: 'auto',
+    display: 'inline-block',
+    background: 'rgba(240,180,41,0.12)',
+    border: '1px solid var(--accent)',
+    borderRadius: 4, color: 'var(--accent)',
+    fontFamily: "'DM Mono', monospace",
+    fontSize: 10, letterSpacing: 2,
+    padding: '8px 14px', cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  },
+  csvConfirm: {
+    fontFamily: "'DM Mono', monospace",
+    fontSize: 11, color: 'var(--green)',
+    marginTop: 12, letterSpacing: 1,
+  },
+  soonHeader: {
+    fontFamily: "'DM Mono', monospace",
+    fontSize: 9, letterSpacing: 3,
+    color: 'var(--text-muted)', marginTop: 8,
+  },
+  soonTag: {
+    marginLeft: 'auto',
+    fontFamily: "'DM Mono', monospace",
+    fontSize: 9, letterSpacing: 2,
+    color: 'var(--text-muted)',
+    border: '1px solid var(--border)',
+    borderRadius: 4, padding: '4px 8px',
+    whiteSpace: 'nowrap',
+  },
   namesGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 },
   nameField: { display: 'flex', alignItems: 'center', gap: 10 },
   nameLabel: { fontFamily: "'DM Mono', monospace", fontSize: 12, color: 'var(--text-muted)', minWidth: 20, textAlign: 'right' },

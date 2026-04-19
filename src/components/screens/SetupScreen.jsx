@@ -29,8 +29,8 @@ const [teamNames, setTeamNames]           = useState(
 const [keepers, setKeepers]               = useState({})
 const [posLimits, setPosLimits]           = useState(w.posLimits    || { ...POS_DEFAULTS })
 const [posMinLimits, setPosMinLimits]     = useState(w.posMinLimits || { ...POS_MIN_DEFAULTS })
-const [players, setPlayers]               = useState([])
-const [csvFilename, setCsvFilename]       = useState('')
+const [players, setPlayers]               = useState(w.players || [])
+const [csvFilename, setCsvFilename]       = useState(w.players?.length > 0 ? '${w.players.length} players loaded from wizard' : '')
 
   const serpentineRounds = Math.max(0, totalRounds - auctionRounds)
   const isAuction        = auctionRounds > 0
@@ -88,31 +88,51 @@ const [csvFilename, setCsvFilename]       = useState('')
     reader.readAsText(file)
   }
 
-  function handleStartDraft() {
-    const draftType = auctionRounds <= 0 ? 'serpentine' : auctionRounds >= totalRounds ? 'auction' : 'hybrid'
-    const config = {
-      numTeams, totalRounds, auctionRounds, serpentineRounds,
-      draftType, auctionBudget, nomOrder, serpStart,
-      keepersPerTeam, posLimits, posMinLimits, draftName,
-    }
-    const teams = teamNames.slice(0, numTeams).map((name, i) => {
-      const roster = []
-      if (keepersPerTeam > 0 && isAuction) {
-        for (let s = 0; s < keepersPerTeam; s++) {
-          const k = keepers[`${i}-${s}`]
-          if (k?.playerId) {
-            const player = players.find(p => p.id === parseInt(k.playerId))
-            if (player) {
-              player.drafted = true
-              roster.push({ ...player, isKeeper: true, keeperCost: parseInt(k.cost) || 0 })
-            }
+function handleStartDraft() {
+  const draftType = auctionRounds <= 0 ? 'serpentine' : auctionRounds >= totalRounds ? 'auction' : 'hybrid'
+  const config = {
+    numTeams, totalRounds, auctionRounds, serpentineRounds,
+    draftType, auctionBudget, nomOrder, serpStart,
+    keepersPerTeam, posLimits, posMinLimits, draftName,
+  }
+
+  const keeperPicks = []
+
+  const teams = teamNames.slice(0, numTeams).map((name, i) => {
+    const roster = []
+    let budget = auctionBudget
+
+    if (keepersPerTeam > 0 && isAuction) {
+      for (let s = 0; s < keepersPerTeam; s++) {
+        const k = keepers[`${i}-${s}`]
+        if (k?.playerId) {
+          const player = players.find(p => p.id === parseInt(k.playerId))
+          if (player) {
+            const cost = parseInt(k.cost) || 0
+            player.drafted = true
+            budget -= cost
+            roster.push({ ...player, isKeeper: true, keeperCost: cost })
+            keeperPicks.push({
+              playerId:   player.id,
+              playerName: player.name,
+              position:   player.position,
+              teamIdx:    i,
+              bid:        cost,
+              phase:      'auction',
+              pickNum:    keeperPicks.length + 1,
+              isKeeper:   true,
+              ts:         Date.now(),
+            })
           }
         }
       }
-      return { id: i, name, roster, budget: auctionBudget, picks: [] }
-    })
-    onStartDraft({ config, teams, players })
-  }
+    }
+
+    return { id: i, name, roster, budget, picks: [] }
+  })
+
+  onStartDraft({ config, teams, players, keeperPicks })
+}
 
   return (
     <div style={S.screen}>
