@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { POSITIONS, POS_DEFAULTS, POS_MIN_DEFAULTS } from '../../state/initialState'
 import { parseCSV } from '../../logic/parsePlayers'
 
@@ -23,6 +23,7 @@ const [auctionBudget, setAuctionBudget]   = useState(w.auctionBudget  || 200)
 const [nomOrder, setNomOrder]             = useState('serpentine')
 const [serpStart, setSerpStart]           = useState('serpentine')
 const [keepersPerTeam, setKeepersPerTeam] = useState(w.keepersPerTeam || 0)
+const [keeperCost, setKeeperCost] = useState(w.keeperCost || 0)
 const [teamNames, setTeamNames]           = useState(
   w.teamNames || Array.from({ length: w.numTeams || 10 }, (_, i) => `Team ${i + 1}`)
 )
@@ -31,6 +32,25 @@ const [posLimits, setPosLimits]           = useState(w.posLimits    || { ...POS_
 const [posMinLimits, setPosMinLimits]     = useState(w.posMinLimits || { ...POS_MIN_DEFAULTS })
 const [players, setPlayers]               = useState(w.players || [])
 const [csvFilename, setCsvFilename]       = useState(w.players?.length > 0 ? '${w.players.length} players loaded from wizard' : '')
+
+useEffect(() => {
+  if (!wizardConfig) return
+  const w = wizardConfig
+  setDraftName(w.draftName || 'DRAFT NIGHT')
+  setNumTeams(w.numTeams || 10)
+  setTotalRounds(w.totalRounds || 15)
+  setAuctionRounds(w.auctionRounds ?? 8)
+  setAuctionBudget(w.auctionBudget || 200)
+  setKeepersPerTeam(w.keepersPerTeam || 0)
+  setKeeperCost(w.keeperCost || 0)
+  setPosLimits(w.posLimits || { ...POS_DEFAULTS })
+  setPosMinLimits(w.posMinLimits || { ...POS_MIN_DEFAULTS })
+  if (w.teamNames) setTeamNames(w.teamNames)
+  if (w.players?.length) {
+    setPlayers(w.players)
+    setCsvFilename(`${w.players.length} players loaded from wizard`)
+  }
+}, [wizardConfig])
 
   const serpentineRounds = Math.max(0, totalRounds - auctionRounds)
   const isAuction        = auctionRounds > 0
@@ -70,10 +90,15 @@ const [csvFilename, setCsvFilename]       = useState(w.players?.length > 0 ? '${
   }
 
   function handleKeeperChange(teamIdx, slotIdx, field, value) {
-    setKeepers(prev => ({
-      ...prev,
-      [`${teamIdx}-${slotIdx}`]: { ...(prev[`${teamIdx}-${slotIdx}`] || {}), [field]: value }
-    }))
+    setKeepers(prev => {
+      const key = `${teamIdx}-${slotIdx}`
+      const existing = prev[key] || {}
+      const updated = { ...existing, [field]: value }
+      if (field === 'playerId' && value && !existing.cost) {
+        updated.cost = keeperCost
+      }
+      return { ...prev, [key]: updated }
+    })
   }
 
   function handleCSV(e) {
@@ -153,7 +178,7 @@ function handleStartDraft() {
             {draftName} <span style={S.editHint}>✏️</span>
           </h1>
         )}
-        <p style={S.logoSub}>FANTASY FOOTBALL DRAFT TOOL</p>
+        <p style={S.logoSub}>REVIEW & CONFIRM SETTINGS</p>
       </div>
 
       <div style={S.grid}>
