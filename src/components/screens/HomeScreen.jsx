@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getDrafts, deleteDraft } from '../../data/draftService'
 
-export default function HomeScreen({ onNewDraft, onLoadDraft }) {
+export default function HomeScreen({ onNewDraft, onLoadDraft, onDevDraft }) {
   const [drafts, setDrafts]     = useState([])
   const [loading, setLoading]   = useState(true)
   const [deleting, setDeleting] = useState(null)
@@ -39,6 +39,11 @@ export default function HomeScreen({ onNewDraft, onLoadDraft }) {
         <button style={S.newBtn} onClick={onNewDraft}>
           + NEW DRAFT
         </button>
+        {import.meta.env.DEV && (
+        <button style={S.devBtn} onClick={onDevDraft}>
+        ⚡ DEV DRAFT
+        </button>
+      )}
       </div>
 
       <div style={S.content}>
@@ -283,5 +288,13 @@ const S = {
     padding: '12px 32px',
     cursor: 'pointer',
     marginTop: 8,
+  },
+  devBtn: {
+  background: 'transparent',
+  border: '1px solid #444',
+  borderRadius: 6, color: '#444',
+  fontFamily: "'DM Mono', monospace",
+  fontSize: 11, letterSpacing: 2,
+  padding: '8px 16px', cursor: 'pointer',
   },
 }

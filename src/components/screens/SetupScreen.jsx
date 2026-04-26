@@ -11,7 +11,7 @@ function getDraftMode(totalRounds, auctionRounds) {
   return                                     { icon: '⚡', label: 'HYBRID DRAFT',     color: '#f0b429' }
 }
 
-export default function SetupScreen({ wizardConfig, onStartDraft }) {
+export default function SetupScreen({ wizardConfig, onStartDraft, settingsMode, currentState, onBackToDraft }) {
 const w = wizardConfig || {}
 
 const [draftName, setDraftName]           = useState(w.draftName     || 'DRAFT NIGHT')
@@ -156,7 +156,9 @@ function handleStartDraft() {
     return { id: i, name, roster, budget, picks: [] }
   })
 
-  onStartDraft({ config, teams, players, keeperPicks })
+  const draftOrder = teams.map((_, i) => i)
+
+  onStartDraft({ config, teams, players, keeperPicks, draftOrder })
 }
 
   return (
@@ -179,6 +181,11 @@ function handleStartDraft() {
           </h1>
         )}
         <p style={S.logoSub}>REVIEW & CONFIRM SETTINGS</p>
+        {settingsMode && (
+         <button style={S.backToDraftBtn} onClick={onBackToDraft}>
+         ← BACK TO DRAFT
+         </button>
+        )}
       </div>
 
       <div style={S.grid}>
@@ -331,9 +338,18 @@ function handleStartDraft() {
                           value={keepers[`${ti}-${si}`]?.playerId || ''}
                           onChange={e => handleKeeperChange(ti, si, 'playerId', e.target.value)}>
                           <option value=''>— Select —</option>
-                          {players.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} ({p.position})</option>
-                          ))}
+                          {players
+                            .filter(p => {
+                              const assignedElsewhere = Object.entries(keepers).some(([key, val]) => {
+                                const [ki, si] = key.split('-').map(Number)
+                                  return val.playerId == p.id && !(ki === ti && si === si)
+                              })
+                              return !assignedElsewhere
+                              })
+                              .map(p => (
+                              <option key={p.id} value={p.id}>{p.name} ({p.position})</option>
+                              ))
+                          }
                         </select>
                         <input style={S.keeperCost} type="number" min="0"
                           placeholder="$" onFocus={sel}
@@ -606,4 +622,13 @@ const S = {
     opacity: 0.4,
     cursor: 'not-allowed',
   },
+  backToDraftBtn: {
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  borderRadius: 4, color: 'var(--text-muted)',
+  fontFamily: "'DM Mono', monospace",
+  fontSize: 11, letterSpacing: 2,
+  padding: '8px 16px', cursor: 'pointer',
+  marginBottom: 24,
+},
 }
