@@ -30,6 +30,9 @@ function App() {
     undoLastPick,
     editPick,
     removePick,
+    addPenalty,
+    renameTeam,
+    addUnlistedPlayer,
   } = useDraftState()
 
   useEffect(() => {
@@ -161,6 +164,9 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
             advanceSerpentine,
             checkPhaseTransition,
             undoLastPick,
+            addPenalty,
+            renameTeam,
+            addUnlistedPlayer,
           }}
           onOpenSettings={handleOpenSettings}
         />

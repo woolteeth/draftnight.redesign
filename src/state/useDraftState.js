@@ -170,6 +170,48 @@ function editPick({ pickNum, bid, position, newTeamIdx, oldTeamIdx, oldBid, play
     return { ...prev, picks, teams }
   })
 }
+function addPenalty(teamIdx, note) {
+  setState(prev => {
+    const team = prev.teams[teamIdx]
+    const penalty = {
+      teamIdx,
+      teamName: team?.name || '',
+      note: note || '',
+      nominationPos: prev.currentAuctionNomIdx,
+      ts: Date.now(),
+    }
+    return {
+      ...prev,
+      penalties: [...prev.penalties, penalty],
+      currentAuctionNomIdx: prev.currentAuctionNomIdx + 1,
+    }
+  })
+}
+function renameTeam(teamIdx, name) {
+  setState(prev => ({
+    ...prev,
+    teams: prev.teams.map((t, i) => i === teamIdx ? { ...t, name } : t)
+  }))
+}
+function addUnlistedPlayer({ id, name, position, nflTeam }) {
+  setState(prev => {
+    const newPlayer = {
+      id:           id || Date.now(),
+      name,
+      position,
+      nflTeam:      nflTeam || '?',
+      overallRank:  9999,
+      auctionValue: 0,
+      byeWeek:      0,
+      drafted:      false,
+      notes:        'Unlisted',
+    }
+    return {
+      ...prev,
+      players:         [...prev.players, newPlayer],
+    }
+  })
+}
   return {
     state,
     setPhase,
@@ -188,5 +230,8 @@ function editPick({ pickNum, bid, position, newTeamIdx, oldTeamIdx, oldBid, play
     checkPhaseTransition,
     undoLastPick,
     editPick,
+    addPenalty,
+    renameTeam,
+    addUnlistedPlayer,
   }
 }

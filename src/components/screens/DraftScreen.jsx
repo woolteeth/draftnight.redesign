@@ -5,12 +5,26 @@ const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
 
 export default function DraftScreen({ state, actions, onOpenSettings }) {
   const { config, teams, players, picks, phase } = state
-  const [filterPos, setFilterPos]       = useState('ALL')
+  const [includedPos, setIncludedPos] = useState(new Set())
+  const [excludedPos, setExcludedPos] = useState(new Set())
   const [searchText, setSearchText]     = useState('')
   const [hideDrafted, setHideDrafted]   = useState(false)
   const [selectedId, setSelectedId]     = useState(null)
   const [bidAmount, setBidAmount]       = useState(1)
   const [winningTeam, setWinningTeam]   = useState(null)
+  const [showPenalty, setShowPenalty] = useState(false)
+  const [penaltyNote, setPenaltyNote] = useState('')
+  const [spotlightTeam, setSpotlightTeam] = useState(null)
+  const [editingSpotlightName, setEditingSpotlightName] = useState(false)
+  const [spotlightNameValue, setSpotlightNameValue] = useState('')
+  const [byeFilter, setByeFilter]   = useState('')
+  const [byeExclude, setByeExclude] = useState(false)
+  const [poolCollapsed, setPoolCollapsed]   = useState(false)
+  const [teamsCollapsed, setTeamsCollapsed] = useState(false)
+  const [showAddPlayer, setShowAddPlayer] = useState(false)
+  const [newPlayerName, setNewPlayerName] = useState('')
+  const [newPlayerPos, setNewPlayerPos]   = useState('WR')
+  const [newPlayerTeam, setNewPlayerTeam] = useState('')
 
   const isAuction    = phase === 'auction'
   const isSerpentine = phase === 'serpentine'
@@ -28,13 +42,20 @@ export default function DraftScreen({ state, actions, onOpenSettings }) {
   const onClockTeam = isAuction ? nomTeam : serpTeam
 
   // Filtered player pool
-  const available = players.filter(p => {
-    if (hideDrafted && p.drafted) return false
-    if (filterPos !== 'ALL' && p.position !== filterPos) return false
-    if (searchText && !p.name.toLowerCase().includes(searchText.toLowerCase()) &&
-        !p.nflTeam?.toLowerCase().includes(searchText.toLowerCase())) return false
-    return true
-  })
+const available = players.filter(p => {
+  if (hideDrafted && p.drafted) return false
+  if (includedPos.size > 0 && !includedPos.has(p.position)) return false
+  if (excludedPos.has(p.position)) return false
+  if (byeFilter) {
+    if (byeExclude && String(p.byeWeek) === byeFilter) return false
+    if (!byeExclude && String(p.byeWeek) !== byeFilter) return false
+  }
+  if (searchText && !p.name.toLowerCase().includes(searchText.toLowerCase()) &&
+      !p.nflTeam?.toLowerCase().includes(searchText.toLowerCase())) return false
+  return true
+})
+
+  const byeWeeks = [...new Set(players.map(p => p.byeWeek).filter(w => w && w > 0))].sort((a, b) => a - b)
 
   const selectedPlayer  = players.find(p => p.id === selectedId)
   const nonKeeperPicks  = picks.filter(p => !p.isKeeper).length
@@ -52,6 +73,23 @@ function getSerpTeamForPick(order, pickIdx, numTeams) {
     setSelectedId(id)
     setBidAmount(1)
     setWinningTeam(null)
+  }
+  
+  function handleAddPlayer() {
+    if (!newPlayerName.trim()) return
+    const newId = Date.now()
+    actions.addUnlistedPlayer({
+      id:       newId,
+      name:     newPlayerName.trim(),
+      position: newPlayerPos,
+      nflTeam:  newPlayerTeam.trim() || '?',
+    })
+    setSelectedId(newId)
+    setBidAmount(1)
+    setWinningTeam(null)
+    setNewPlayerName('')
+    setNewPlayerTeam('')
+    setShowAddPlayer(false)
   }
 
 function handleConfirmAuction() {
@@ -89,11 +127,11 @@ function handleConfirmAuction() {
       return
     }
   // Auction rounds per team check
-     const auctionPicksMade = picks.filter(p => 
-      p.teamIdx === winningTeam && p.phase === 'auction' && !p.isKeeper
+    const auctionPicksMade = picks.filter(p => 
+      p.teamIdx === winningTeam && p.phase === 'auction'
     ).length
     if (auctionPicksMade >= auctionRounds) {
-      alert(`${team.name} has already filled all ${auctionRounds} auction spots`)
+      alert(`${team.name} has already filled all ${auctionRounds} auction spots (including keepers)`)
       return
     }
   }
@@ -200,6 +238,7 @@ function handleConfirmAuction() {
         <div style={S.headerRight}>
           <button style={S.undoBtn} onClick={actions.undoLastPick}>↩ UNDO</button>
           <button style={S.settingsBtn} onClick={onOpenSettings}>⚙ SETTINGS</button>
+          <button style={S.addPlayerBtn} onClick={() => setShowAddPlayer(true)}>+ PLAYER</button>
         </div>
       </div>
 
@@ -207,75 +246,116 @@ function handleConfirmAuction() {
       <div style={S.layout}>
 
         {/* Left: Player Pool */}
-        <div style={S.poolPanel}>
-          <div style={S.panelTitle}>PLAYER POOL ({available.filter(p => !p.drafted).length})</div>
-
-          {/* Search */}
-          <div style={S.searchRow}>
-            <input
-              style={S.searchInput}
-              type="text"
-              placeholder="Search players..."
-              value={searchText}
-              onChange={e => setSearchText(e.target.value)}
-            />
-          </div>
-
-          {/* Position Filter */}
-          <div style={S.filterRow}>
-            {['ALL', ...POSITIONS].map(pos => (
-              <button key={pos}
-                style={{
-                  ...S.filterBtn,
-                  ...(filterPos === pos ? S.filterBtnActive : {}),
-                  ...(filterPos === pos && pos !== 'ALL' ? { color: posColor(pos), borderColor: posColor(pos) } : {})
-                }}
-                onClick={() => setFilterPos(pos)}>
-                {pos}
-              </button>
+<div style={{ ...S.poolPanel, ...(poolCollapsed ? S.panelCollapsed : {}), position: 'relative' }}>
+  <button
+    style={{ ...S.panelToggle, right: -12 }}
+    onClick={() => setPoolCollapsed(c => !c)}
+    title={poolCollapsed ? 'Show player pool' : 'Hide player pool'}>
+    {poolCollapsed ? '▶' : '◀'}
+  </button>
+  {!poolCollapsed && (
+    <>
+      <div style={S.panelTitle}>PLAYER POOL ({available.filter(p => !p.drafted).length})</div>
+      <div style={S.searchRow}>
+        <input
+          style={S.searchInput}
+          type="text"
+          placeholder="Search players..."
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+        />
+      </div>
+      <div style={S.filterRow}>
+        <button
+          style={{
+            ...S.filterBtn,
+            ...(includedPos.size === 0 && excludedPos.size === 0 ? S.filterBtnActive : {})
+          }}
+          onClick={() => { setIncludedPos(new Set()); setExcludedPos(new Set()); setByeFilter('') }}>
+          ALL
+        </button>
+        {POSITIONS.map(pos => {
+          const included = includedPos.has(pos)
+          const excluded = excludedPos.has(pos)
+          return (
+            <button key={pos}
+              style={{
+                ...S.filterBtn,
+                ...(included ? { color: posColor(pos), borderColor: posColor(pos), background: `${posColor(pos)}18` } : {}),
+                ...(excluded ? { color: 'var(--red)', borderColor: 'var(--red)', background: 'rgba(239,68,68,0.1)', textDecoration: 'line-through' } : {}),
+              }}
+              onClick={() => {
+                if (excluded) {
+                  setExcludedPos(prev => { const n = new Set(prev); n.delete(pos); return n })
+                } else if (included) {
+                  setIncludedPos(prev => { const n = new Set(prev); n.delete(pos); return n })
+                  setExcludedPos(prev => new Set([...prev, pos]))
+                } else {
+                  setIncludedPos(prev => new Set([...prev, pos]))
+                }
+              }}>
+              {pos}
+            </button>
+          )
+        })}
+      </div>
+      {byeWeeks.length > 0 && (
+        <div style={S.byeRow}>
+          <button
+            style={{
+              ...S.byeToggle,
+              ...(byeExclude
+                ? { color: 'var(--red)', borderColor: 'var(--red)', background: 'rgba(239,68,68,0.1)' }
+                : { color: 'var(--accent)', borderColor: 'var(--accent)', background: 'rgba(240,180,41,0.1)' }
+              )
+            }}
+            onClick={() => setByeExclude(b => !b)}
+            title={byeExclude ? 'Excluding this bye week' : 'Showing only this bye week'}>
+            {byeExclude ? '≠' : '='}
+          </button>
+          <select style={S.byeSelect} value={byeFilter} onChange={e => setByeFilter(e.target.value)}>
+            <option value=''>BYE</option>
+            {byeWeeks.map(w => (
+              <option key={w} value={String(w)}>Wk {w}</option>
             ))}
-          </div>
-
-          {/* Hide Drafted */}
-          <label style={S.hideDraftedRow}>
-            <input
-              type="checkbox"
-              checked={hideDrafted}
-              onChange={e => setHideDrafted(e.target.checked)}
-              style={{ accentColor: 'var(--accent)' }}
-            />
-            <span style={S.hideDraftedLabel}>Hide drafted</span>
-          </label>
-
-          {/* Player List */}
-          <div style={S.playerList}>
-            {available.length === 0 ? (
-              <div style={S.emptyPool}>NO PLAYERS FOUND</div>
-            ) : available.map(p => (
-              <div key={p.id}
-                style={{
-                  ...S.playerRow,
-                  ...(p.drafted ? S.playerRowDrafted : {}),
-                  ...(selectedId === p.id ? S.playerRowSelected : {}),
-                }}
-                onClick={() => !p.drafted && handleSelectPlayer(p.id)}>
-                <span style={{ ...S.playerPos, color: posColor(p.position) }}>{p.position}</span>
-                <div style={S.playerInfo}>
-                  <span style={{ ...S.playerName, ...(p.drafted ? { textDecoration: 'line-through', opacity: 0.5 } : {}) }}>
-                    {p.name}
-                  </span>
-                  <span style={S.playerMeta}>{p.nflTeam}{p.byeWeek ? ` · Bye ${p.byeWeek}` : ''}</span>
-                </div>
-                {p.auctionValue > 0 && (
-                  <span style={{ ...S.playerValue, ...(p.drafted ? { opacity: 0.4 } : {}) }}>
-                    ${p.auctionValue}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+          </select>
         </div>
-
+      )}
+      <label style={S.hideDraftedRow}>
+        <input type="checkbox" checked={hideDrafted}
+          onChange={e => setHideDrafted(e.target.checked)}
+          style={{ accentColor: 'var(--accent)' }} />
+        <span style={S.hideDraftedLabel}>Hide drafted</span>
+      </label>
+      <div style={S.playerList}>
+        {available.length === 0 ? (
+          <div style={S.emptyPool}>NO PLAYERS FOUND</div>
+        ) : available.map(p => (
+          <div key={p.id}
+            style={{
+              ...S.playerRow,
+              ...(p.drafted ? S.playerRowDrafted : {}),
+              ...(selectedId === p.id ? S.playerRowSelected : {}),
+            }}
+            onClick={() => !p.drafted && handleSelectPlayer(p.id)}>
+            <span style={{ ...S.playerPos, color: posColor(p.position) }}>{p.position}</span>
+            <div style={S.playerInfo}>
+              <span style={{ ...S.playerName, ...(p.drafted ? { textDecoration: 'line-through', opacity: 0.5 } : {}) }}>
+                {p.name}
+              </span>
+              <span style={S.playerMeta}>{p.nflTeam}{p.byeWeek ? ` · Bye ${p.byeWeek}` : ''}</span>
+            </div>
+            {p.auctionValue > 0 && (
+              <span style={{ ...S.playerValue, ...(p.drafted ? { opacity: 0.4 } : {}) }}>
+                ${p.auctionValue}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+</div>
         {/* Center: OTC + Board */}
         <div style={S.centerPanel}>
 
@@ -339,6 +419,7 @@ function handleConfirmAuction() {
                         CONFIRM PICK
                       </button>
                       <button style={S.clearBtn} onClick={() => setSelectedId(null)}>CLEAR</button>
+                      <button style={S.penaltyBtn} onClick={() => setShowPenalty(true)}>⚑ PENALTY</button>
                     </div>
                   </>
                 ) : (
@@ -441,97 +522,360 @@ function handleConfirmAuction() {
         </div>
 
         {/* Right: Teams Panel */}
-        <div style={S.teamsPanel}>
-          <div style={S.panelTitle}>TEAMS</div>
-          <div style={S.teamsList}>
-            {draftOrder.map(ti => {
-              const team    = teams[ti]
-              if (!team) return null
-              const isOnClock = ti === onClockIdx
-              const budget    = team.budget ?? config?.auctionBudget ?? 200
-              const maxBudget = config?.auctionBudget || 200
-              const budgetPct = Math.max(0, Math.min(1, budget / maxBudget))
-              const barColor  = getBudgetColor(budget, maxBudget)
-              const teamPicks = picks.filter(p => p.teamIdx === ti)
-              const posCounts = getTeamPositionCounts(team)
-              const posLimits = config?.posLimits || {}
+                    <div style={{ ...S.teamsPanel, ...(teamsCollapsed ? S.panelCollapsed : {}), position: 'relative' }}>
+  <button
+    style={{ ...S.panelToggle, left: -12 }}
+    onClick={() => setTeamsCollapsed(c => !c)}
+    title={teamsCollapsed ? 'Show teams' : 'Hide teams'}>
+    {teamsCollapsed ? '◀' : '▶'}
+  </button>
+  {!teamsCollapsed && (
+    <>
+      <div style={S.panelTitle}>TEAMS</div>
+      <div style={S.teamsList}>
+        {draftOrder.map(ti => {
+          const team = teams[ti]
+          if (!team) return null
+          const isOnClock = ti === onClockIdx
+          const budget    = team.budget ?? config?.auctionBudget ?? 200
+          const maxBudget = config?.auctionBudget || 200
+          const budgetPct = Math.max(0, Math.min(1, budget / maxBudget))
+          const barColor  = getBudgetColor(budget, maxBudget)
+          const teamPicks = picks.filter(p => p.teamIdx === ti)
+          const posCounts = getTeamPositionCounts(team)
+          const posLimits = config?.posLimits || {}
 
-              return (
-                <div key={ti} style={{
-                  ...S.teamCard,
-                  ...(isOnClock ? S.teamCardOnClock : {}),
-                }}>
-                  {isOnClock && (
-                    <div style={S.onClockBadge}>▶ ON THE CLOCK</div>
-                  )}
-                  <div style={S.teamCardName}>{team.name}</div>
-
-                  {isAuction && (
-                    <>
-                      <div style={S.teamCardStats}>
-                        <span style={{ color: barColor, fontWeight: 600 }}>${budget}</span>
-                        <span style={S.teamCardStatLabel}>remaining</span>
-                        <span style={S.teamCardStatDivider}>·</span>
-                        <span>{teamPicks.filter(p => p.phase === 'auction').length}/{config?.auctionRounds || 0}</span>
-                        <span style={S.teamCardStatLabel}>auc</span>
-                      </div>
-                      <div style={S.budgetBarTrack}>
-                        <div style={{
-                          ...S.budgetBarFill,
-                          width: `${budgetPct * 100}%`,
-                          background: barColor,
-                        }} />
-                      </div>
-                    </>
-                  )}
-
-                  <div style={S.posCountRow}>
-                    {POSITIONS.filter(pos => (posLimits[pos] || 0) > 0).map(pos => {
-                      const count = posCounts[pos] || 0
-                      const max   = posLimits[pos] || 0
-                      const full  = count >= max
-                      return (
-                        <div key={pos} style={{
-                          ...S.posCount,
-                          background: `${posColor(pos)}22`,
-                          color: full ? 'var(--text-muted)' : posColor(pos),
-                          opacity: full ? 0.5 : 1,
-                        }}>
-                          {count}/{max} {pos}
-                        </div>
-                      )
-                    })}
+          return (
+            <div key={ti} style={{
+              ...S.teamCard,
+              ...(isOnClock ? S.teamCardOnClock : {}),
+              cursor: 'pointer',
+            }} onClick={() => setSpotlightTeam(ti)}>
+              {isOnClock && <div style={S.onClockBadge}>▶ ON THE CLOCK</div>}
+              <div style={S.teamCardName}>{team.name}</div>
+              {isAuction && (
+                <>
+                  <div style={S.teamCardStats}>
+                    <span style={{ color: barColor, fontWeight: 600 }}>${budget}</span>
+                    <span style={S.teamCardStatLabel}>remaining</span>
+                    <span style={S.teamCardStatDivider}>·</span>
+                    <span>{teamPicks.filter(p => p.phase === 'auction').length}/{config?.auctionRounds || 0}</span>
+                    <span style={S.teamCardStatLabel}>auc</span>
                   </div>
-
-                  {teamPicks.length > 0 && (
-                    <div style={S.miniRoster}>
-                      {teamPicks.slice(-3).map((pick, i) => {
-                        const player = players.find(p => p.id === pick.playerId)
-                        if (!player) return null
-                        return (
-                          <div key={i} style={S.miniPick}>
-                            <span style={{ color: posColor(player.position), fontSize: 9, minWidth: 24 }}>
-                              {player.position}
-                            </span>
-                            <span style={S.miniPickName}>{player.name}</span>
-                            {pick.bid > 0 && (
-                              <span style={S.miniPickBid}>${pick.bid}</span>
-                            )}
-                          </div>
-                        )
-                      })}
-                      {teamPicks.length > 3 && (
-                        <div style={S.miniPickMore}>+{teamPicks.length - 3} more</div>
-                      )}
+                  <div style={S.budgetBarTrack}>
+                    <div style={{ ...S.budgetBarFill, width: `${budgetPct * 100}%`, background: barColor }} />
+                  </div>
+                </>
+              )}
+              <div style={S.posCountRow}>
+                {POSITIONS.filter(pos => (posLimits[pos] || 0) > 0).map(pos => {
+                  const count = posCounts[pos] || 0
+                  const max   = posLimits[pos] || 0
+                  const full  = count >= max
+                  return (
+                    <div key={pos} style={{
+                      ...S.posCount,
+                      background: `${posColor(pos)}22`,
+                      color: full ? 'var(--text-muted)' : posColor(pos),
+                      opacity: full ? 0.5 : 1,
+                    }}>
+                      {count}/{max} {pos}
                     </div>
+                  )
+                })}
+              </div>
+              {teamPicks.length > 0 && (
+                <div style={S.miniRoster}>
+                  {teamPicks.slice(-3).map((pick, i) => {
+                    const player = players.find(p => p.id === pick.playerId)
+                    if (!player) return null
+                    return (
+                      <div key={i} style={S.miniPick}>
+                        <span style={{ color: posColor(player.position), fontSize: 9, minWidth: 24 }}>
+                          {player.position}
+                        </span>
+                        <span style={S.miniPickName}>{player.name}</span>
+                        {pick.bid > 0 && <span style={S.miniPickBid}>${pick.bid}</span>}
+                      </div>
+                    )
+                  })}
+                  {teamPicks.length > 3 && (
+                    <div style={S.miniPickMore}>+{teamPicks.length - 3} more</div>
                   )}
                 </div>
-              )
-            })}
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )}
+</div>
+
+      </div>
+            
+            {spotlightTeam !== null && (() => {
+  const team      = teams[spotlightTeam]
+  const teamPicks = picks.filter(p => p.teamIdx === spotlightTeam)
+  const auctionPicks = teamPicks.filter(p => p.phase === 'auction')
+  const serpPicks    = teamPicks.filter(p => p.phase === 'serpentine')
+  const spent     = teamPicks.reduce((s, p) => s + (p.bid || 0), 0)
+  const posLimits = config?.posLimits || {}
+  const posMinLimits = config?.posMinLimits || {}
+
+  return (
+    <div style={S.overlay} onClick={() => setSpotlightTeam(null)}>
+      <div style={S.spotlightModal} onClick={e => e.stopPropagation()}>
+
+        <div style={S.modalHeader}>
+          <div>
+{editingSpotlightName ? (
+  <input
+    style={{
+      fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, letterSpacing: 4,
+      background: 'transparent', border: 'none',
+      borderBottom: '2px solid var(--accent)', color: 'var(--accent)',
+      outline: 'none', width: '100%',
+    }}
+    value={spotlightNameValue}
+    onChange={e => setSpotlightNameValue(e.target.value.toUpperCase())}
+    onBlur={() => {
+      if (spotlightNameValue.trim()) {
+        actions.renameTeam(spotlightTeam, spotlightNameValue.trim())
+      }
+      setEditingSpotlightName(false)
+    }}
+    onKeyDown={e => {
+      if (e.key === 'Enter' || e.key === 'Escape') e.target.blur()
+    }}
+    autoFocus
+  />
+) : (
+  <div
+    style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 32, letterSpacing: 4, color: 'var(--text)', cursor: 'pointer' }}
+    onClick={() => { setSpotlightNameValue(team?.name || ''); setEditingSpotlightName(true) }}
+    title="Click to rename">
+    {team?.name} <span style={{ fontSize: 16, opacity: 0.4 }}>✏️</span>
+  </div>
+)}
+            <div style={{ display: 'flex', gap: 20, marginTop: 6 }}>
+              {isAuction && (
+                <>
+                  <div style={S.spotStat}>
+                    <span style={S.spotStatVal}>${team?.budget ?? 0}</span>
+                    <span style={S.spotStatLbl}>REMAINING</span>
+                  </div>
+                  <div style={S.spotStat}>
+                    <span style={S.spotStatVal}>${spent}</span>
+                    <span style={S.spotStatLbl}>SPENT</span>
+                  </div>
+                  <div style={S.spotStat}>
+                    <span style={S.spotStatVal}>{auctionPicks.length}/{config?.auctionRounds || 0}</span>
+                    <span style={S.spotStatLbl}>AUCTION</span>
+                  </div>
+                </>
+              )}
+              <div style={S.spotStat}>
+                <span style={S.spotStatVal}>{teamPicks.length}</span>
+                <span style={S.spotStatLbl}>TOTAL PICKS</span>
+              </div>
+            </div>
           </div>
+          <button style={S.closeBtn} onClick={() => setSpotlightTeam(null)}>✕</button>
+        </div>
+
+        <div style={S.spotlightBody}>
+
+          {/* Position Needs */}
+          {Object.keys(posLimits).some(pos => posLimits[pos] > 0) && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={S.spotSection}>POSITION NEEDS</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {POSITIONS.filter(pos => posLimits[pos] > 0).map(pos => {
+                  const count  = teamPicks.filter(p => {
+                    const pl = players.find(x => x.id === p.playerId)
+                    return (p.overridePosition || pl?.position) === pos
+                  }).length
+                  const max    = posLimits[pos] || 0
+                  const min    = posMinLimits[pos] || 0
+                  const metMin = count >= min
+                  const full   = count >= max
+                  return (
+                    <div key={pos} style={{
+                      background: `${posColor(pos)}18`,
+                      border: `1px solid ${posColor(pos)}44`,
+                      borderRadius: 6, padding: '8px 14px',
+                      opacity: full ? 0.5 : 1,
+                    }}>
+                      <div style={{ color: posColor(pos), fontFamily: "'DM Mono', monospace", fontSize: 12, fontWeight: 700 }}>{pos}</div>
+                      <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, lineHeight: 1 }}>{count}</div>
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: metMin ? 'var(--text-muted)' : 'var(--red)' }}>
+                        min {min} / max {max}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Auction Picks */}
+          {auctionPicks.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={S.spotSection}>AUCTION PICKS</div>
+              {auctionPicks.map((pick, i) => {
+                const pl = players.find(x => x.id === pick.playerId)
+                if (!pl) return null
+                const pos = pick.overridePosition || pl.position
+                return (
+                  <div key={i} style={S.spotPickRow}>
+                    <span style={{ ...S.pickPos, color: posColor(pos) }}>{pos}</span>
+                    <span style={S.spotPickName}>{pl.name}</span>
+                    <span style={S.pickMeta}>{pl.nflTeam}</span>
+                    {pick.isKeeper && <span style={S.keeperTag}>K</span>}
+                    <span style={S.pickBid}>${pick.bid}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Serpentine Picks */}
+          {serpPicks.length > 0 && (
+            <div>
+              <div style={S.spotSection}>SERPENTINE PICKS</div>
+              {serpPicks.map((pick, i) => {
+                const pl = players.find(x => x.id === pick.playerId)
+                if (!pl) return null
+                const pos = pick.overridePosition || pl.position
+                return (
+                  <div key={i} style={S.spotPickRow}>
+                    <span style={{ ...S.pickPos, color: posColor(pos) }}>{pos}</span>
+                    <span style={S.spotPickName}>{pl.name}</span>
+                    <span style={S.pickMeta}>{pl.nflTeam}</span>
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--blue)' }}>
+                      #{pick.pickNum}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {teamPicks.length === 0 && (
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--text-muted)', padding: '20px 0' }}>
+              No picks yet
+            </div>
+          )}
+
         </div>
 
       </div>
+    </div>
+  )
+})()}
+      {showAddPlayer && (
+  <div style={S.overlay} onClick={() => setShowAddPlayer(false)}>
+    <div style={S.penaltyModal} onClick={e => e.stopPropagation()}>
+      <div style={S.modalHeader}>
+        <div style={S.modalTitle}>ADD UNLISTED PLAYER</div>
+        <button style={S.closeBtn} onClick={() => setShowAddPlayer(false)}>✕</button>
+      </div>
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)', marginBottom: 6 }}>PLAYER NAME</div>
+          <input
+            style={{ ...S.searchInput, width: '100%' }}
+            type="text"
+            placeholder="e.g. John Smith"
+            value={newPlayerName}
+            onChange={e => setNewPlayerName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddPlayer()}
+            autoFocus
+          />
+        </div>
+        <div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)', marginBottom: 6 }}>POSITION</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {POSITIONS.map(pos => (
+              <button key={pos}
+                style={{
+                  ...S.filterBtn,
+                  ...(newPlayerPos === pos ? { color: posColor(pos), borderColor: posColor(pos), background: `${posColor(pos)}18` } : {})
+                }}
+                onClick={() => setNewPlayerPos(pos)}>
+                {pos}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)', marginBottom: 6 }}>NFL TEAM (OPTIONAL)</div>
+          <input
+            style={{ ...S.searchInput, width: '100%' }}
+            type="text"
+            placeholder="e.g. DAL"
+            value={newPlayerTeam}
+            onChange={e => setNewPlayerTeam(e.target.value.toUpperCase())}
+            maxLength={4}
+          />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
+        <button style={S.cancelBtn} onClick={() => setShowAddPlayer(false)}>CANCEL</button>
+        <button style={S.confirmBtn} onClick={handleAddPlayer}>ADD & SELECT</button>
+      </div>
+    </div>
+  </div>
+)}
+      {showPenalty && (
+          <div style={S.overlay} onClick={() => setShowPenalty(false)}>
+          <div style={S.penaltyModal} onClick={e => e.stopPropagation()}>
+          <div style={S.modalHeader}>
+          <div style={{ ...S.modalTitle, color: 'var(--red)' }}>⚑ ISSUE PENALTY</div>
+          <button style={S.closeBtn} onClick={() => setShowPenalty(false)}>✕</button>
+         </div>
+          <div style={{ padding: '16px 20px' }}>
+             <div style={{ fontFamily: "'Bebas Neue', sans-serif", fontSize: 28, letterSpacing: 2, marginBottom: 4 }}>
+           {onClockTeam?.name}
+         </div>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--text-muted)', marginBottom: 16 }}>
+          Nomination will skip to next team. No budget or roster impact.
+        </div>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2, color: 'var(--text-muted)', marginBottom: 6 }}>
+          REASON (OPTIONAL)
+        </div>
+        <input
+          style={{ ...S.searchInput, width: '100%' }}
+          type="text"
+          placeholder="e.g. Took too long to nominate"
+          value={penaltyNote}
+          onChange={e => setPenaltyNote(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') {
+              actions.addPenalty(onClockIdx, penaltyNote)
+              setPenaltyNote('')
+              setShowPenalty(false)
+            }
+          }}
+          autoFocus
+        />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
+        <button style={S.cancelBtn} onClick={() => setShowPenalty(false)}>CANCEL</button>
+        <button style={{ ...S.confirmBtn, background: 'rgba(239,68,68,0.2)', borderColor: 'var(--red)', color: 'var(--red)' }}
+          onClick={() => {
+            actions.addPenalty(onClockIdx, penaltyNote)
+            setPenaltyNote('')
+            setShowPenalty(false)
+          }}>
+          ⚑ ISSUE PENALTY
+        </button>
+      </div>
+    </div>
+  </div>
+)
+}
     </div>
   )
 }
@@ -739,6 +1083,92 @@ const S = {
     padding: '10px 12px 8px', borderBottom: '1px solid var(--border)', flexShrink: 0,
   },
   undoBtn: {
+  background: 'transparent', border: '1px solid var(--border)',
+  borderRadius: 4, color: 'var(--text-muted)',
+  fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 2,
+  padding: '6px 14px', cursor: 'pointer',
+},
+penaltyBtn: {
+  background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)',
+  borderRadius: 4, color: 'var(--red)',
+  fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
+  padding: '6px 12px', cursor: 'pointer',
+},
+penaltyModal: {
+  background: 'var(--surface)', border: '1px solid var(--red)',
+  borderRadius: 12, width: '100%', maxWidth: 420,
+  display: 'flex', flexDirection: 'column', overflow: 'hidden',
+},
+cancelBtn: {
+  background: 'transparent', border: '1px solid var(--border)',
+  borderRadius: 4, color: 'var(--text-muted)',
+  fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
+  padding: '8px 14px', cursor: 'pointer',
+},
+overlay: {
+  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  zIndex: 1000,
+},
+modalHeader: {
+  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  padding: '16px 20px', borderBottom: '1px solid var(--border)',
+},
+modalTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 3, color: 'var(--accent)' },
+closeBtn: {
+  background: 'transparent', border: 'none',
+  color: 'var(--text-muted)', fontSize: 16, cursor: 'pointer', padding: '4px 8px',
+},
+spotlightModal: {
+  background: 'var(--surface)', border: '1px solid var(--border)',
+  borderRadius: 12, width: '100%', maxWidth: 560, maxHeight: '85vh',
+  display: 'flex', flexDirection: 'column', overflow: 'hidden',
+},
+spotlightBody: {
+  flex: 1, overflowY: 'auto', padding: '20px 24px',
+},
+spotSection: {
+  fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 3,
+  color: 'var(--text-muted)', marginBottom: 10,
+  paddingBottom: 6, borderBottom: '1px solid var(--border)',
+},
+spotStat: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
+spotStatVal: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 24, color: 'var(--accent)', lineHeight: 1 },
+spotStatLbl: { fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)' },
+spotPickRow: {
+  display: 'flex', alignItems: 'center', gap: 8,
+  padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+},
+spotPickName: {
+  fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15, fontWeight: 600, flex: 1,
+},
+byeRow: {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '6px 10px', borderBottom: '1px solid var(--border)',
+},
+byeToggle: {
+  background: 'transparent', border: '1px solid var(--border)',
+  borderRadius: 3, fontFamily: "'DM Mono', monospace",
+  fontSize: 13, fontWeight: 700, width: 28, height: 28,
+  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+},
+byeSelect: {
+  background: 'var(--surface2)', border: '1px solid var(--border)',
+  borderRadius: 3, color: 'var(--text)',
+  fontFamily: "'DM Mono', monospace", fontSize: 11,
+  padding: '4px 6px', flex: 1,
+},
+panelCollapsed: { width: 20, minWidth: 20 },
+panelToggle: {
+  position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+  background: 'var(--surface2)', border: '1px solid var(--border)',
+  borderRadius: 4, color: 'var(--accent)',
+  fontFamily: "'DM Mono', monospace", fontSize: 10,
+  width: 20, height: 48, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  zIndex: 10,
+},
+addPlayerBtn: {
   background: 'transparent', border: '1px solid var(--border)',
   borderRadius: 4, color: 'var(--text-muted)',
   fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 2,
