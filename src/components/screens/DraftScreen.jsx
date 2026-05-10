@@ -59,6 +59,7 @@ const available = players.filter(p => {
 
   const selectedPlayer  = players.find(p => p.id === selectedId)
   const nonKeeperPicks  = picks.filter(p => !p.isKeeper).length
+  const totalAuctionPicks = picks.filter(p => p.phase === 'auction').length
 
 function getSerpTeamForPick(order, pickIdx, numTeams) {
   if (!order || order.length === 0) return 0
@@ -229,7 +230,7 @@ function handleConfirmAuction() {
           {isAuction && (
             <div style={S.headerStat}>
               <span style={S.headerStatVal}>
-                {(config?.auctionRounds || 0) * (teams?.length || 0) - nonKeeperPicks}
+                {(config?.auctionRounds || 0) * (teams?.length || 0) - totalAuctionPicks}
               </span>
               <span style={S.headerStatLbl}>AUC LEFT</span>
             </div>
@@ -398,16 +399,24 @@ function handleConfirmAuction() {
                     <div style={S.bidRow}>
                       <div style={S.fieldLabel}>WINNING TEAM</div>
                       <div style={S.teamSelectRow}>
-                        {teams.map((t, i) => (
-                          <button key={i}
-                            style={{ ...S.teamSelectBtn, ...(winningTeam === i ? S.teamSelectBtnActive : {}) }}
-                            onClick={() => setWinningTeam(i)}>
-                            {t.name}
-                            {t.budget !== undefined && isAuction && (
-                              <span style={S.teamBudgetTag}> ${t.budget}</span>
-                            )}
-                          </button>
-                        ))}
+                        {teams.map((t, i) => {
+                          const auctionPicksMade = picks.filter(p => p.teamIdx === i && p.phase === 'auction').length
+                          const isFull = auctionPicksMade >= (config?.auctionRounds || 0)
+                          return (
+                            <button key={i}
+                              style={{
+                                ...S.teamSelectBtn,
+                                ...(winningTeam === i ? S.teamSelectBtnActive : {}),
+                                ...(isFull ? { opacity: 0.3, textDecoration: 'line-through' } : {})
+                              }}
+                              onClick={() => setWinningTeam(i)}>
+                              {t.name}
+                              {t.budget !== undefined && isAuction && (
+                                <span style={S.teamBudgetTag}> ${t.budget}</span>
+                              )}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
 

@@ -33,6 +33,8 @@ function App() {
     addPenalty,
     renameTeam,
     addUnlistedPlayer,
+    replacePick,
+    addDirectPick,
   } = useDraftState()
 
   useEffect(() => {
@@ -167,6 +169,7 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
             addPenalty,
             renameTeam,
             addUnlistedPlayer,
+            addDirectPick,
           }}
           onOpenSettings={handleOpenSettings}
         />
@@ -176,7 +179,7 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
     state={state}
     onUndoLastPick={() => { undoLastPick(); setAppPhase('draft') }}
     onBackToHome={() => setAppPhase('home')}
-    actions={{ editPick, removePick }}
+    actions={{ editPick, removePick, replacePick, addUnlistedPlayer, addDirectPick }}
   />
 )}
     </div>

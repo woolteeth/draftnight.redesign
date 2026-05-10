@@ -94,7 +94,7 @@ function removePick(pickNum) {
 
   function checkPhaseTransition() {
     setState(prev => {
-      const auctionPickCount = prev.picks.filter(p => !p.isKeeper && p.phase === 'auction').length
+      const auctionPickCount = prev.picks.filter(p => p.phase === 'auction').length
       const totalAuctionPicks = (prev.config?.auctionRounds || 0) * (prev.teams?.length || 0)
       if (prev.phase === 'auction' && auctionPickCount >= totalAuctionPicks) {
         const newPhase = prev.config?.serpentineRounds > 0 ? 'serpentine' : 'done'
@@ -212,6 +212,39 @@ function addUnlistedPlayer({ id, name, position, nflTeam }) {
     }
   })
 }
+
+function replacePick({ pickNum, oldPlayerId, newPlayerId, teamIdx, bid, position }) {
+  setState(prev => {
+    const picks = prev.picks.map(p => {
+      if (p.pickNum !== pickNum) return p
+      const newPlayer = prev.players.find(x => x.id === newPlayerId)
+      return { ...p, playerId: newPlayerId, playerName: newPlayer?.name || '', position }
+    })
+    const players = prev.players.map(p => {
+      if (p.id === oldPlayerId) return { ...p, drafted: false }
+      if (p.id === newPlayerId) return { ...p, drafted: true }
+      return p
+    })
+    return { ...prev, picks, players }
+  })
+}
+
+function addDirectPick({ playerId, playerName, position, teamIdx, bid }) {
+  setState(prev => {
+    const pickNum = prev.picks.length > 0
+      ? Math.max(...prev.picks.map(p => p.pickNum)) + 1
+      : 1
+    const newPick = {
+      playerId, playerName, position, teamIdx, bid,
+      phase: 'manual', pickNum, isKeeper: false, ts: Date.now(),
+    }
+    const players = prev.players.map(p =>
+      p.id === playerId ? { ...p, drafted: true } : p
+    )
+    return { ...prev, picks: [...prev.picks, newPick], players }
+  })
+}
+
   return {
     state,
     setPhase,
@@ -233,5 +266,7 @@ function addUnlistedPlayer({ id, name, position, nflTeam }) {
     addPenalty,
     renameTeam,
     addUnlistedPlayer,
+    replacePick,
+    addDirectPick,
   }
 }

@@ -5,10 +5,26 @@ const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
 
 export default function DoneScreen({ state, onUndoLastPick, onBackToHome, actions }) {
   const { config, teams, players, picks, draftOrder } = state
-  const [editPick, setEditPick]         = useState(null)
-  const [editBid, setEditBid]           = useState(0)
-  const [editPosition, setEditPosition] = useState('')
-  const [editTeamIdx, setEditTeamIdx]   = useState(0)
+  const [editPick, setEditPick]               = useState(null)
+  const [editBid, setEditBid]                 = useState(0)
+  const [editPosition, setEditPosition]       = useState('')
+  const [editTeamIdx, setEditTeamIdx]         = useState(0)
+  const [showReplace, setShowReplace]         = useState(false)
+  const [replaceSearch, setReplaceSearch]     = useState('')
+  const [showAddToPool, setShowAddToPool]     = useState(false)
+  const [newPoolName, setNewPoolName]         = useState('')
+  const [newPoolPos, setNewPoolPos]           = useState('WR')
+  const [newPoolTeam, setNewPoolTeam]         = useState('')
+  const [addToTeam, setAddToTeam] = useState(null)
+  const [addSearch, setAddSearch] = useState('')
+
+  const undraftedPlayers = players
+    .filter(p => !p.drafted)
+    .sort((a, b) => a.overallRank - b.overallRank)
+
+  const filteredUndrafted = undraftedPlayers.filter(p =>
+    !replaceSearch || p.name.toLowerCase().includes(replaceSearch.toLowerCase())
+  )
 
   const orderedTeams = (draftOrder && draftOrder.length > 0
     ? draftOrder.map(i => teams[i])
@@ -35,6 +51,11 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
 
   function closeEdit() {
     setEditPick(null)
+    setShowReplace(false)
+    setReplaceSearch('')
+    setShowAddToPool(false)
+    setNewPoolName('')
+    setNewPoolTeam('')
   }
 
   function handleSaveEdit() {
@@ -55,6 +76,45 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
     if (!editPick) return
     actions.removePick(editPick.pickNum)
     closeEdit()
+  }
+
+  function handleReplacePlayer(newPlayer) {
+    if (!editPick) return
+    actions.replacePick({
+      pickNum:     editPick.pickNum,
+      oldPlayerId: editPick.playerId,
+      newPlayerId: newPlayer.id,
+      teamIdx:     editPick.teamIdx,
+      bid:         editBid,
+      position:    newPlayer.position,
+    })
+    closeEdit()
+  }
+
+  function handleAddToPool() {
+    if (!newPoolName.trim()) return
+    actions.addUnlistedPlayer({
+      id:       Date.now(),
+      name:     newPoolName.trim(),
+      position: newPoolPos,
+      nflTeam:  newPoolTeam.trim() || '?',
+    })
+    setNewPoolName('')
+    setNewPoolTeam('')
+    setShowAddToPool(false)
+  }
+
+  function handleAddPick(player) {
+  if (addToTeam === null) return
+  actions.addDirectPick({
+    playerId:   player.id,
+    playerName: player.name,
+    position:   player.position,
+    teamIdx:    addToTeam,
+    bid:        0,
+  })
+  setAddToTeam(null)
+  setAddSearch('')
   }
 
   const totalPicks = picks.filter(p => !p.isKeeper).length
@@ -86,14 +146,14 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
       </div>
 
       {/* Hint */}
-      <div style={S.hint}>Click any pick to edit bid, position, or team assignment</div>
+      <div style={S.hint}>Click any pick to edit bid, position, team assignment, or replace player</div>
 
       {/* Roster Grid */}
       <div style={S.grid}>
         {orderedTeams.map((team, ti) => {
-          const teamIdx  = team.id ?? ti
+          const teamIdx   = team.id ?? ti
           const teamPicks = getTeamPicks(teamIdx)
-          const spent    = teamPicks.reduce((s, p) => s + (p.bid || 0), 0)
+          const spent     = teamPicks.reduce((s, p) => s + (p.bid || 0), 0)
           const remaining = team.budget ?? 0
 
           return (
@@ -126,11 +186,67 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
                     </div>
                   )
                 })}
-              </div>
+                <div
+                  style={S.addPickRow}
+                  onClick={() => { setAddToTeam(teamIdx); setAddSearch('') }}>
+                  + ADD PICK
+                </div>
             </div>
+          </div>
           )
         })}
       </div>
+
+        {addToTeam !== null && (
+  <div style={S.overlay} onClick={() => setAddToTeam(null)}>
+    <div style={S.modal} onClick={e => e.stopPropagation()}>
+      <div style={S.modalHeader}>
+        <div style={S.modalTitle}>ADD PICK — {teams[addToTeam]?.name}</div>
+        <button style={S.closeBtn} onClick={() => setAddToTeam(null)}>✕</button>
+      </div>
+      <div style={S.modalBody}>
+        <input
+          style={{ ...S.searchInput, width: '100%' }}
+          type="text"
+          placeholder="Search available players..."
+          value={addSearch}
+          onChange={e => setAddSearch(e.target.value)}
+          autoFocus
+        />
+        <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
+          {players
+            .filter(p => !p.drafted && (!addSearch || p.name.toLowerCase().includes(addSearch.toLowerCase())))
+            .sort((a, b) => a.overallRank - b.overallRank)
+            .map(p => (
+              <div key={p.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  cursor: 'pointer',
+                }}
+                onClick={() => handleAddPick(p)}>
+                <span style={{ ...S.pickPos, color: posColor(p.position) }}>{p.position}</span>
+                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, fontWeight: 600, flex: 1 }}>{p.name}</span>
+                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--text-muted)' }}>{p.nflTeam}</span>
+                {p.auctionValue > 0 && (
+                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--accent)' }}>${p.auctionValue}</span>
+                )}
+              </div>
+            ))}
+          {players.filter(p => !p.drafted).length === 0 && (
+            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--text-muted)', padding: 12 }}>
+              No available players
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
+        <button style={S.cancelBtn} onClick={() => setAddToTeam(null)}>CANCEL</button>
+      </div>
+    </div>
+  </div>
+)}
+
 
       {/* Edit Modal */}
       {editPick && (
@@ -207,13 +323,94 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
                 <div style={S.keeperNote}>★ Keeper — bid amount locked</div>
               )}
 
+              {/* Replace Player Section */}
+              {showReplace && (
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                  <div style={S.fieldLabel}>REPLACE WITH</div>
+                  <input
+                    style={{ ...S.searchInput, width: '100%', marginBottom: 8, marginTop: 6 }}
+                    type="text"
+                    placeholder="Search available players..."
+                    value={replaceSearch}
+                    onChange={e => setReplaceSearch(e.target.value)}
+                    autoFocus
+                  />
+                  <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
+                    {filteredUndrafted.length === 0 ? (
+                      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--text-muted)', padding: 12 }}>
+                        No players found
+                      </div>
+                    ) : filteredUndrafted.map(p => (
+                      <div key={p.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => handleReplacePlayer(p)}>
+                        <span style={{ ...S.pickPos, color: posColor(p.position) }}>{p.position}</span>
+                        <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, fontWeight: 600, flex: 1 }}>{p.name}</span>
+                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--text-muted)' }}>{p.nflTeam}</span>
+                        {p.auctionValue > 0 && (
+                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--accent)' }}>${p.auctionValue}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {!showAddToPool ? (
+                    <button style={{ ...S.cancelBtn, marginTop: 8 }} onClick={() => setShowAddToPool(true)}>
+                      + ADD PLAYER TO POOL
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={S.fieldLabel}>NEW PLAYER</div>
+                      <input
+                        style={{ ...S.searchInput, width: '100%' }}
+                        type="text"
+                        placeholder="Player name"
+                        value={newPoolName}
+                        onChange={e => setNewPoolName(e.target.value)}
+                        autoFocus
+                      />
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {POSITIONS.map(pos => (
+                          <button key={pos}
+                            style={{
+                              ...S.posBtn,
+                              ...(newPoolPos === pos
+                                ? { background: `${posColor(pos)}22`, borderColor: posColor(pos), color: posColor(pos) }
+                                : {})
+                            }}
+                            onClick={() => setNewPoolPos(pos)}>
+                            {pos}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        style={{ ...S.searchInput, width: '100%' }}
+                        type="text"
+                        placeholder="NFL team (optional)"
+                        value={newPoolTeam}
+                        onChange={e => setNewPoolTeam(e.target.value.toUpperCase())}
+                        maxLength={4}
+                      />
+                      <button style={S.saveBtn} onClick={handleAddToPool}>ADD TO POOL</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
 
             <div style={S.modalFooter}>
-              <button style={S.removeBtn} onClick={handleRemovePick}>🗑 REMOVE PICK</button>
+              <button style={S.removeBtn} onClick={handleRemovePick}>🗑 REMOVE</button>
+              <button style={S.replaceBtn} onClick={() => setShowReplace(r => !r)}>
+                {showReplace ? '✕ CANCEL REPLACE' : '⇄ REPLACE'}
+              </button>
               <div style={S.footerRight}>
                 <button style={S.cancelBtn} onClick={closeEdit}>CANCEL</button>
-                <button style={S.saveBtn} onClick={handleSaveEdit}>SAVE CHANGES</button>
+                <button style={S.saveBtn} onClick={handleSaveEdit}>SAVE</button>
               </div>
             </div>
 
@@ -310,12 +507,12 @@ const S = {
   },
   modal: {
     background: 'var(--surface)', border: '1px solid var(--border)',
-    borderRadius: 12, width: '100%', maxWidth: 520,
+    borderRadius: 12, width: '100%', maxWidth: 520, maxHeight: '90vh',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   modalHeader: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '16px 20px', borderBottom: '1px solid var(--border)',
+    padding: '16px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
   },
   modalTitle: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 22, letterSpacing: 3, color: 'var(--accent)' },
   closeBtn: {
@@ -325,12 +522,12 @@ const S = {
   playerBanner: {
     display: 'flex', alignItems: 'center', gap: 12,
     padding: '14px 20px', background: 'var(--surface2)',
-    borderBottom: '1px solid var(--border)',
+    borderBottom: '1px solid var(--border)', flexShrink: 0,
   },
   bannerPos:  { fontFamily: "'DM Mono', monospace", fontSize: 13, fontWeight: 700 },
   bannerName: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 26, letterSpacing: 2, flex: 1 },
   bannerMeta: { fontFamily: "'DM Mono', monospace", fontSize: 11, color: 'var(--text-muted)' },
-  modalBody: { padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 },
+  modalBody: { padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 },
   fieldGroup: { display: 'flex', flexDirection: 'column', gap: 8 },
   fieldLabel: { fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)' },
   posRow: { display: 'flex', gap: 6, flexWrap: 'wrap' },
@@ -369,14 +566,27 @@ const S = {
     color: 'var(--accent)', background: 'rgba(240,180,41,0.08)',
     border: '1px solid rgba(240,180,41,0.2)', borderRadius: 4, padding: '8px 12px',
   },
+  searchInput: {
+    background: 'var(--surface2)', border: '1px solid var(--border)',
+    borderRadius: 4, color: 'var(--text)',
+    fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14,
+    padding: '6px 10px',
+  },
   modalFooter: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '14px 20px', borderTop: '1px solid var(--border)',
+    flexShrink: 0, flexWrap: 'wrap', gap: 8,
   },
   footerRight: { display: 'flex', gap: 8 },
   removeBtn: {
     background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)',
     borderRadius: 4, color: 'var(--red)',
+    fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
+    padding: '8px 14px', cursor: 'pointer',
+  },
+  replaceBtn: {
+    background: 'rgba(30,136,229,0.1)', border: '1px solid #1e88e5',
+    borderRadius: 4, color: '#1e88e5',
     fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
     padding: '8px 14px', cursor: 'pointer',
   },
@@ -392,4 +602,10 @@ const S = {
     fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, letterSpacing: 3,
     padding: '8px 20px', cursor: 'pointer',
   },
+  addPickRow: {
+  fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
+  color: 'var(--accent)', padding: '10px 16px',
+  cursor: 'pointer', borderTop: '1px solid var(--border)',
+  opacity: 0.6,
+},
 }

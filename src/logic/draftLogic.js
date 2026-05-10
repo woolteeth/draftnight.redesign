@@ -35,7 +35,13 @@ export function getAvailablePlayers(players, filterPos = 'ALL') {
 }
 
 export function getNominatorTeamIdx(draftOrder, nomIdx) {
-  return draftOrder[nomIdx % draftOrder.length]
+  if (!draftOrder || draftOrder.length === 0) return 0
+  const numTeams = draftOrder.length
+  const round = Math.floor(nomIdx / numTeams)
+  const posInRound = nomIdx % numTeams
+  const isReverse = round % 2 === 1
+  const orderPos = isReverse ? (numTeams - 1 - posInRound) : posInRound
+  return draftOrder[orderPos]
 }
 
 export function isAuctionComplete(teams, config) {
