@@ -15,8 +15,8 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
   const [newPoolName, setNewPoolName]         = useState('')
   const [newPoolPos, setNewPoolPos]           = useState('WR')
   const [newPoolTeam, setNewPoolTeam]         = useState('')
-  const [addToTeam, setAddToTeam] = useState(null)
-  const [addSearch, setAddSearch] = useState('')
+  const [addToTeam, setAddToTeam]             = useState(null)
+  const [addSearch, setAddSearch]             = useState('')
 
   const undraftedPlayers = players
     .filter(p => !p.drafted)
@@ -91,6 +91,37 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
     closeEdit()
   }
 
+  function handleExportCSV() {
+    const rows = [
+      ['Team', 'Player', 'Position', 'NFL Team', 'Bid', 'Type', 'Keeper']
+    ]
+    picks
+      .sort((a, b) => a.pickNum - b.pickNum)
+      .forEach(pick => {
+        const player = getPlayer(pick.playerId)
+        const team   = teams[pick.teamIdx]
+        if (!player || !team) return
+        const pos = pick.overridePosition || player.position
+        rows.push([
+          team.name,
+          player.name,
+          pos,
+          player.nflTeam || '',
+          pick.bid || 0,
+          pick.phase || '',
+          pick.isKeeper ? 'Yes' : 'No',
+        ])
+      })
+    const csv  = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `${config?.draftName || 'draft'}-results.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   function handleAddToPool() {
     if (!newPoolName.trim()) return
     actions.addUnlistedPlayer({
@@ -105,16 +136,16 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
   }
 
   function handleAddPick(player) {
-  if (addToTeam === null) return
-  actions.addDirectPick({
-    playerId:   player.id,
-    playerName: player.name,
-    position:   player.position,
-    teamIdx:    addToTeam,
-    bid:        0,
-  })
-  setAddToTeam(null)
-  setAddSearch('')
+    if (addToTeam === null) return
+    actions.addDirectPick({
+      playerId:   player.id,
+      playerName: player.name,
+      position:   player.position,
+      teamIdx:    addToTeam,
+      bid:        0,
+    })
+    setAddToTeam(null)
+    setAddSearch('')
   }
 
   const totalPicks = picks.filter(p => !p.isKeeper).length
@@ -124,7 +155,7 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
     <div style={S.screen}>
 
       {/* Header */}
-      <div style={S.header}>
+      <div style={S.header} className="no-print">
         <div style={S.headerLeft}>
           <div style={S.draftName}>{config?.draftName || 'DRAFT NIGHT'}</div>
           <div style={S.completeBadge}>✓ DRAFT COMPLETE</div>
@@ -140,13 +171,16 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
               <span style={S.headerStatLbl}>TOTAL SPENT</span>
             </div>
           )}
-          <button style={S.undoBtn} onClick={onUndoLastPick}>↩ UNDO LAST PICK</button>
+          <button style={S.exportBtn} onClick={handleExportCSV}>↓ CSV</button>
+          <button style={S.exportBtn} onClick={() => window.print()}>⎙ PRINT</button>
           <button style={S.homeBtn} onClick={onBackToHome}>← HOME</button>
         </div>
       </div>
 
       {/* Hint */}
-      <div style={S.hint}>Click any pick to edit bid, position, team assignment, or replace player</div>
+      <div style={S.hint} className="no-print">
+        Click any pick to edit bid, position, team assignment, or replace player
+      </div>
 
       {/* Roster Grid */}
       <div style={S.grid}>
@@ -182,71 +216,72 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
                       </span>
                       <span style={S.pickMeta}>{player.nflTeam}</span>
                       {pick.bid > 0 && <span style={S.pickBid}>${pick.bid}</span>}
-                      <span style={S.editHint}>✎</span>
+                      <span style={S.editHint} className="no-print">✎</span>
                     </div>
                   )
                 })}
                 <div
                   style={S.addPickRow}
+                  className="no-print"
                   onClick={() => { setAddToTeam(teamIdx); setAddSearch('') }}>
                   + ADD PICK
                 </div>
+              </div>
             </div>
-          </div>
           )
         })}
       </div>
 
-        {addToTeam !== null && (
-  <div style={S.overlay} onClick={() => setAddToTeam(null)}>
-    <div style={S.modal} onClick={e => e.stopPropagation()}>
-      <div style={S.modalHeader}>
-        <div style={S.modalTitle}>ADD PICK — {teams[addToTeam]?.name}</div>
-        <button style={S.closeBtn} onClick={() => setAddToTeam(null)}>✕</button>
-      </div>
-      <div style={S.modalBody}>
-        <input
-          style={{ ...S.searchInput, width: '100%' }}
-          type="text"
-          placeholder="Search available players..."
-          value={addSearch}
-          onChange={e => setAddSearch(e.target.value)}
-          autoFocus
-        />
-        <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
-          {players
-            .filter(p => !p.drafted && (!addSearch || p.name.toLowerCase().includes(addSearch.toLowerCase())))
-            .sort((a, b) => a.overallRank - b.overallRank)
-            .map(p => (
-              <div key={p.id}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)',
-                  cursor: 'pointer',
-                }}
-                onClick={() => handleAddPick(p)}>
-                <span style={{ ...S.pickPos, color: posColor(p.position) }}>{p.position}</span>
-                <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, fontWeight: 600, flex: 1 }}>{p.name}</span>
-                <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--text-muted)' }}>{p.nflTeam}</span>
-                {p.auctionValue > 0 && (
-                  <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--accent)' }}>${p.auctionValue}</span>
+      {/* Add Pick Modal */}
+      {addToTeam !== null && (
+        <div style={S.overlay} onClick={() => setAddToTeam(null)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <div style={S.modalHeader}>
+              <div style={S.modalTitle}>ADD PICK — {teams[addToTeam]?.name}</div>
+              <button style={S.closeBtn} onClick={() => setAddToTeam(null)}>✕</button>
+            </div>
+            <div style={S.modalBody}>
+              <input
+                style={{ ...S.searchInput, width: '100%' }}
+                type="text"
+                placeholder="Search available players..."
+                value={addSearch}
+                onChange={e => setAddSearch(e.target.value)}
+                autoFocus
+              />
+              <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 4 }}>
+                {players
+                  .filter(p => !p.drafted && (!addSearch || p.name.toLowerCase().includes(addSearch.toLowerCase())))
+                  .sort((a, b) => a.overallRank - b.overallRank)
+                  .map(p => (
+                    <div key={p.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => handleAddPick(p)}>
+                      <span style={{ ...S.pickPos, color: posColor(p.position) }}>{p.position}</span>
+                      <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 14, fontWeight: 600, flex: 1 }}>{p.name}</span>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: 'var(--text-muted)' }}>{p.nflTeam}</span>
+                      {p.auctionValue > 0 && (
+                        <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--accent)' }}>${p.auctionValue}</span>
+                      )}
+                    </div>
+                  ))}
+                {players.filter(p => !p.drafted).length === 0 && (
+                  <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--text-muted)', padding: 12 }}>
+                    No available players
+                  </div>
                 )}
               </div>
-            ))}
-          {players.filter(p => !p.drafted).length === 0 && (
-            <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--text-muted)', padding: 12 }}>
-              No available players
             </div>
-          )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
+              <button style={S.cancelBtn} onClick={() => setAddToTeam(null)}>CANCEL</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
-        <button style={S.cancelBtn} onClick={() => setAddToTeam(null)}>CANCEL</button>
-      </div>
-    </div>
-  </div>
-)}
-
+      )}
 
       {/* Edit Modal */}
       {editPick && (
@@ -266,7 +301,6 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
 
             <div style={S.modalBody}>
 
-              {/* Position */}
               <div style={S.fieldGroup}>
                 <label style={S.fieldLabel}>POSITION</label>
                 <div style={S.posRow}>
@@ -285,7 +319,6 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
                 </div>
               </div>
 
-              {/* Team */}
               <div style={S.fieldGroup}>
                 <label style={S.fieldLabel}>ASSIGNED TEAM</label>
                 <div style={S.teamRow}>
@@ -299,7 +332,6 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
                 </div>
               </div>
 
-              {/* Bid */}
               {editPick.phase === 'auction' && !editPick.isKeeper && (
                 <div style={S.fieldGroup}>
                   <label style={S.fieldLabel}>BID AMOUNT</label>
@@ -323,7 +355,6 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
                 <div style={S.keeperNote}>★ Keeper — bid amount locked</div>
               )}
 
-              {/* Replace Player Section */}
               {showReplace && (
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
                   <div style={S.fieldLabel}>REPLACE WITH</div>
@@ -444,7 +475,7 @@ const S = {
   headerStat:    { display: 'flex', flexDirection: 'column', alignItems: 'center' },
   headerStatVal: { fontFamily: "'Bebas Neue', sans-serif", fontSize: 20, color: 'var(--accent)', lineHeight: 1 },
   headerStatLbl: { fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 2, color: 'var(--text-muted)' },
-  undoBtn: {
+  exportBtn: {
     background: 'transparent', border: '1px solid var(--border)',
     borderRadius: 4, color: 'var(--text-muted)',
     fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 2,
@@ -499,6 +530,12 @@ const S = {
     fontFamily: "'DM Mono', monospace", fontSize: 8, color: 'var(--accent)',
     background: 'rgba(240,180,41,0.2)', borderRadius: 2,
     padding: '1px 4px', marginLeft: 4,
+  },
+  addPickRow: {
+    fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
+    color: 'var(--accent)', padding: '10px 16px',
+    cursor: 'pointer', borderTop: '1px solid var(--border)',
+    opacity: 0.6,
   },
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
@@ -602,10 +639,4 @@ const S = {
     fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, letterSpacing: 3,
     padding: '8px 20px', cursor: 'pointer',
   },
-  addPickRow: {
-  fontFamily: "'DM Mono', monospace", fontSize: 10, letterSpacing: 2,
-  color: 'var(--accent)', padding: '10px 16px',
-  cursor: 'pointer', borderTop: '1px solid var(--border)',
-  opacity: 0.6,
-},
 }

@@ -73,7 +73,7 @@ function getSerpTeamForPick(order, pickIdx, numTeams) {
   function handleSelectPlayer(id) {
     setSelectedId(id)
     setBidAmount(1)
-    setWinningTeam(null)
+    setWinningTeam(nomTeamIdx)
   }
   
   function handleAddPlayer() {
