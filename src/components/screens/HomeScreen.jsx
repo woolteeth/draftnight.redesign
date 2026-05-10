@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getDrafts, deleteDraft } from '../../data/draftService'
 
-export default function HomeScreen({ onNewDraft, onLoadDraft, onDevDraft }) {
+export default function HomeScreen({ onNewDraft, onLoadDraft, onDevDraft, onRestore }) {
   const [drafts, setDrafts]     = useState([])
   const [loading, setLoading]   = useState(true)
   const [deleting, setDeleting] = useState(null)
@@ -38,6 +38,9 @@ export default function HomeScreen({ onNewDraft, onLoadDraft, onDevDraft }) {
         </div>
         <button style={S.newBtn} onClick={onNewDraft}>
           + NEW DRAFT
+        </button>
+        <button style={S.restoreBtn} onClick={onRestore}>
+          ↑ RESTORE BACKUP
         </button>
         {import.meta.env.DEV && (
         <button style={S.devBtn} onClick={onDevDraft}>
@@ -296,5 +299,11 @@ const S = {
   fontFamily: "'DM Mono', monospace",
   fontSize: 11, letterSpacing: 2,
   padding: '8px 16px', cursor: 'pointer',
+  },
+  restoreBtn: {
+  background: 'transparent', border: '1px solid var(--border)',
+  borderRadius: 4, color: 'var(--text-muted)',
+  fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 2,
+  padding: '6px 14px', cursor: 'pointer',
   },
 }

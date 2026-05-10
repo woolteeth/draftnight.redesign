@@ -3,7 +3,7 @@ import { posColor } from '../../logic/draftLogic'
 
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
 
-export default function DoneScreen({ state, onUndoLastPick, onBackToHome, actions }) {
+export default function DoneScreen({ state, onUndoLastPick, onBackToHome, onSave, actions }) {
   const { config, teams, players, picks, draftOrder } = state
   const [editPick, setEditPick]               = useState(null)
   const [editBid, setEditBid]                 = useState(0)
@@ -173,6 +173,7 @@ export default function DoneScreen({ state, onUndoLastPick, onBackToHome, action
           )}
           <button style={S.exportBtn} onClick={handleExportCSV}>↓ CSV</button>
           <button style={S.exportBtn} onClick={() => window.print()}>⎙ PRINT</button>
+          <button style={S.exportBtn} onClick={onSave}>↓ SAVE</button>
           <button style={S.homeBtn} onClick={onBackToHome}>← HOME</button>
         </div>
       </div>

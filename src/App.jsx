@@ -51,14 +51,67 @@ function App() {
   async function handleLoadDraft(id) {
     const record = await loadDraft(id)
     if (!record) return
+
     updateState({
-      phase:   record.phase,
-      config:  record.config,
-      teams:   record.teams,
-      players: record.players,
-      picks:   record.picks || [],
+      phase:               record.phase,
+      config:              record.config,
+      teams:               record.teams,
+      players:             record.players,
+      picks:               record.picks || [],
+      draftOrder:          record.config?.draftOrder || record.teams?.map((_, i) => i) || [],
+      currentAuctionNomIdx: record.currentAuctionNomIdx || 0,
+      serpPickIdx:         record.serpPickIdx || 0,
+      pbRecordId:          record.id,
     })
-    setAppPhase('draft')
+
+    if (record.phase === 'done') {
+      setAppPhase('done')
+    } else {
+     setAppPhase('draft')
+    }
+  }
+
+  function handleSaveBackup() {
+  const backup = {
+    version:   1,
+    savedAt:   new Date().toISOString(),
+    draftName: state.config?.draftName || 'draft',
+    state:     state,
+  }
+  const json = JSON.stringify(backup, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = `${state.config?.draftName || 'draft'}-backup-${Date.now()}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  }
+
+  function handleRestoreBackup(file, confirmFirst = false) {
+  if (confirmFirst) {
+    const ok = window.confirm('This will replace your current draft with the backup. Any picks made since the last save will be lost. Continue?')
+    if (!ok) return
+  }
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const backup = JSON.parse(e.target.result)
+      if (!backup.state) {
+        alert('Invalid backup file.')
+        return
+      }
+      updateState(backup.state)
+      setAppPhase(backup.state.phase === 'done' ? 'done' : 'draft')
+    } catch {
+      alert('Could not read backup file. Make sure it is a valid draft backup.')
+    }
+  }
+  reader.readAsText(file)
+  }
+
+  function openRestorePicker() {
+    document.getElementById('restore-file-input').click()
   }
 
   function handleWizardComplete(config) {
@@ -81,7 +134,7 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
     serpPickIdx: 0,
   })
 
-    const record = await createDraft(config, teams, players)
+    const record = await createDraft(config, teams, players, resolvedDraftOrder)
     if (record) updateState({ pbRecordId: record.id })
 
     setSettingsMode(false)
@@ -129,6 +182,7 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
   setAppPhase('draft')
 }
   return (
+
     <div>
       {showWizard && (
         <NewDraftWizard
@@ -143,6 +197,7 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
           onNewDraft={() => setShowWizard(true)}
           onLoadDraft={handleLoadDraft}
           onDevDraft={handleDevDraft}
+          onRestore={openRestorePicker}
         />
       )}
 
@@ -153,8 +208,23 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
           currentState={state}
           onStartDraft={handleStartDraft}
           onBackToDraft={handleBackToDraft}
+          onRestore={openRestorePicker}
         />
       )}
+
+      <input
+        id="restore-file-input"
+        type="file"
+        accept=".json"
+        style={{ display: 'none' }}
+        onChange={e => {
+          const file = e.target.files[0]
+          if (file) {
+            handleRestoreBackup(file, appPhase === 'draft')
+            e.target.value = ''
+          }
+        }}
+      />
 
       {appPhase === 'draft' && (
         <DraftScreen
@@ -172,6 +242,7 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
             addDirectPick,
           }}
           onOpenSettings={handleOpenSettings}
+          onSave={handleSaveBackup}
         />
       )}
 {appPhase === 'done' && (
@@ -179,6 +250,7 @@ async function handleStartDraft({ config, teams, players, keeperPicks = [], draf
     state={state}
     onUndoLastPick={() => { undoLastPick(); setAppPhase('draft') }}
     onBackToHome={() => setAppPhase('home')}
+    onSave={handleSaveBackup}
     actions={{ editPick, removePick, replacePick, addUnlistedPlayer, addDirectPick }}
   />
 )}

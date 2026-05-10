@@ -14,16 +14,17 @@ export async function getDrafts() {
   }
 }
 
-export async function createDraft(config, teams, players) {
+export async function createDraft(config, teams, players, draftOrder) {
   try {
     const record = await pb.collection(COLLECTION).create({
-      name: config.draftName,
+      name:   config.draftName,
       status: 'active',
       config,
       teams,
       players,
-      picks: [],
-      phase: 'auction',
+      picks:      [],
+      phase:      'auction',
+      draftOrder: draftOrder || teams.map((_, i) => i),
     })
     return record
   } catch (err) {
@@ -40,6 +41,7 @@ export async function saveDraft(id, state) {
       players: state.players,
       picks: state.picks,
       config: state.config,
+      draftOrder: state.draftOrder,
       status: state.phase === 'done' ? 'complete' : 'active',
     })
     return record

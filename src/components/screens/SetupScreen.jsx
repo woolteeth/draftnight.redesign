@@ -11,7 +11,7 @@ function getDraftMode(totalRounds, auctionRounds) {
   return                                     { icon: '⚡', label: 'HYBRID DRAFT',     color: '#f0b429' }
 }
 
-export default function SetupScreen({ wizardConfig, onStartDraft, settingsMode, currentState, onBackToDraft }) {
+export default function SetupScreen({ wizardConfig, onStartDraft, settingsMode, currentState, onBackToDraft, onRestore }) {
 const w = wizardConfig || {}
 
 const [draftName, setDraftName]           = useState(w.draftName     || 'DRAFT NIGHT')
@@ -186,6 +186,9 @@ function handleStartDraft() {
          ← BACK TO DRAFT
          </button>
         )}
+        <button style={S.restoreBtn} onClick={onRestore}>
+          ↑ RESTORE BACKUP
+        </button>
       </div>
 
       <div style={S.grid}>
@@ -630,5 +633,11 @@ const S = {
   fontSize: 11, letterSpacing: 2,
   padding: '8px 16px', cursor: 'pointer',
   marginBottom: 24,
-},
+  },
+  restoreBtn: {
+  background: 'transparent', border: '1px solid var(--border)',
+  borderRadius: 4, color: 'var(--text-muted)',
+  fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 2,
+  padding: '6px 14px', cursor: 'pointer', marginTop: 8,
+  },
 }

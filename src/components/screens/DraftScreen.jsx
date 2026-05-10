@@ -3,7 +3,7 @@ import { getAvailablePlayers, getNominatorTeamIdx, posColor } from '../../logic/
 
 const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF']
 
-export default function DraftScreen({ state, actions, onOpenSettings }) {
+export default function DraftScreen({ state, actions, onOpenSettings, onSave }) {
   const { config, teams, players, picks, phase } = state
   const [includedPos, setIncludedPos] = useState(new Set())
   const [excludedPos, setExcludedPos] = useState(new Set())
@@ -238,6 +238,7 @@ function handleConfirmAuction() {
         </div>
         <div style={S.headerRight}>
           <button style={S.undoBtn} onClick={actions.undoLastPick}>↩ UNDO</button>
+          <button style={S.exportBtn} onClick={onSave}>↓ SAVE</button>
           <button style={S.settingsBtn} onClick={onOpenSettings}>⚙ SETTINGS</button>
           <button style={S.addPlayerBtn} onClick={() => setShowAddPlayer(true)}>+ PLAYER</button>
         </div>
@@ -1178,6 +1179,12 @@ panelToggle: {
   zIndex: 10,
 },
 addPlayerBtn: {
+  background: 'transparent', border: '1px solid var(--border)',
+  borderRadius: 4, color: 'var(--text-muted)',
+  fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 2,
+  padding: '6px 14px', cursor: 'pointer',
+},
+exportBtn: {
   background: 'transparent', border: '1px solid var(--border)',
   borderRadius: 4, color: 'var(--text-muted)',
   fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: 2,
